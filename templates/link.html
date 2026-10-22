@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RingCare - Ring Account Linking</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/accessibility.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body class="theme-dark link-body">
+  <main class="link-container" role="main">
+    <div class="link-card">
+      <div class="brand-header">
+        <div class="logo-circle">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">RingCare</h1>
+          <p class="brand-tagline">Elderly Care & Accessibility Monitor</p>
+        </div>
+      </div>
+
+      <div class="link-banner">
+        <h2>Link Ring Account</h2>
+        <p>Connect your family member's Ring Doorbell & Cameras to activate accessibility alerts, check-ins, and visitor protection.</p>
+      </div>
+
+      {% if success %}
+        <div class="alert alert-success" role="alert">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          <div>
+            <strong>Ring Account Connected!</strong>
+            <p>Successfully verified and linked account <code>{{ account_id }}</code> with caregiver identifier <code>{{ masked_email }}</code>.</p>
+            <p style="margin-top: 8px;">Ring App-Integration completed with status <strong>completed</strong>.</p>
+          </div>
+        </div>
+        <div style="margin-top: 24px; text-align: center;">
+          <a href="/" class="btn btn-primary btn-large">Go to Caregiver Dashboard &rarr;</a>
+        </div>
+      {% else %}
+
+        {% if error %}
+          <div class="alert alert-error" role="alert">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <div>
+              <strong>Linking Verification Error</strong>
+              <p>{{ error }}</p>
+            </div>
+          </div>
+        {% endif %}
+
+        {% if time_error %}
+          <div class="alert alert-warning" role="alert">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <div>
+              <strong>Session Warning</strong>
+              <p>{{ time_error }}</p>
+            </div>
+          </div>
+        {% endif %}
+
+        <form action="/ring/link?nonce={{ nonce }}&time={{ time_param }}" method="POST" class="auth-form" novalidate>
+          <div class="security-note">
+            <span class="security-badge">Ring Partner Security</span>
+            <p>Per Ring specification, your identity must be authenticated before the HMAC security nonce can be verified and bound to your account.</p>
+          </div>
+
+          <div class="form-group">
+            <label for="email" class="form-label">Caregiver Email Address</label>
+            <input 
+              type="email" 
+              id="email" 
+              name="email" 
+              class="form-control" 
+              placeholder="caregiver@family.org" 
+              value="caregiver@family.org" 
+              required
+              aria-describedby="email-help"
+            >
+            <span id="email-help" class="form-text">This will be masked as <code>c***r@family.org</code> and sent in <code>POST /v1/accounts/me/app-integrations</code>.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="password" class="form-label">Caregiver Password</label>
+            <input 
+              type="password" 
+              id="password" 
+              name="password" 
+              class="form-control" 
+              placeholder="••••••••••••" 
+              value="CaregiverSecure2026!"
+              required
+            >
+          </div>
+
+          <div class="nonce-metadata-card">
+            <h4>Ring OAuth Link Parameters</h4>
+            <div class="meta-row">
+              <span class="meta-label">Nonce:</span>
+              <code class="meta-value">{{ nonce or 'demo_link_nonce_auto' }}</code>
+            </div>
+            <div class="meta-row">
+              <span class="meta-label">Timestamp (time):</span>
+              <code class="meta-value">{{ time_param or 'Current Timestamp' }}</code>
+            </div>
+            <div class="meta-row">
+              <span class="meta-label">HMAC Algorithm:</span>
+              <span class="meta-value">SHA256 URL-Safe Base64</span>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-large btn-block" id="btn-verify-link">
+              Authenticate & Complete Account Link
+            </button>
+          </div>
+        </form>
+
+        {% if demo_mode %}
+          <div class="demo-quicklink-box">
+            <span class="demo-pill">Hackathon Demo Mode</span>
+            <p>Testing without physical Ring devices? You can trigger a live simulated account linking handshake right now:</p>
+            <button type="button" class="btn btn-secondary btn-small" id="btn-demo-autofill" onclick="autofillDemo()">
+              Autofill Valid Link Parameters & Sign In
+            </button>
+          </div>
+        {% endif %}
+
+      {% endif %}
+
+      <div class="footer-links">
+        <a href="/">Dashboard</a>
+        <span>&bull;</span>
+        <a href="/privacy">Privacy & Data Consent</a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function autofillDemo() {
+      const now = Math.floor(Date.now() / 1000);
+      const url = new URL(window.location.href);
+      url.searchParams.set('time', now.toString());
+      url.searchParams.set('nonce', 'demo_test');
+      window.location.href = url.toString();
+    }
+  </script>
+</body>
+</html>

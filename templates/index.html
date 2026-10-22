@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="RingCare - Elderly and accessibility care monitoring powered by Ring Partner API (Amazon Vision API).">
+  <title>RingCare - Caregiver Dashboard & Accessibility Monitor</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/accessibility.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body class="theme-dark font-normal" id="app-body">
+
+  <!-- Accessibility Live Region for Screen Readers -->
+  <div id="sr-announcements" class="sr-only" role="status" aria-live="polite"></div>
+
+  <!-- Giant Visual Flashing Alert Banner (Deaf / Hard-of-Hearing Accessibility) -->
+  <aside 
+    id="visual-alert-banner" 
+    class="visual-alert-banner hidden" 
+    role="alert" 
+    aria-live="assertive"
+    aria-atomic="true"
+  >
+    <div class="alert-banner-inner">
+      <div class="alert-icon-pulse" id="alert-banner-icon">🔔</div>
+      <div class="alert-snapshot-box" id="alert-banner-snap-box">
+        <img 
+          id="alert-banner-snapshot" 
+          src="/static/snapshots/placeholder_doorbell.jpg" 
+          alt="Camera snapshot for visitor" 
+          class="alert-banner-img"
+          onerror="onSnapshotError(this)"
+        >
+      </div>
+      <div class="alert-text-group">
+        <span class="alert-tag">SAFETY & ACCESSIBILITY ALERT</span>
+        <h2 id="alert-banner-title" class="alert-banner-title">DOORBELL PRESSED AT FRONT PORCH</h2>
+        <p id="alert-banner-sub" class="alert-banner-sub">A visitor is standing at the front door. Snapshot captured.</p>
+        <span id="alert-banner-offline-warn" class="badge-offline-warning hidden">⚠️ Received while device offline (snapshot unavailable)</span>
+      </div>
+      <div class="alert-actions">
+        <button id="btn-replay-tts" class="btn btn-secondary btn-icon" title="Replay voice announcement" aria-label="Replay audio announcement">
+          🔊 Replay
+        </button>
+        <button id="btn-dismiss-alert" class="btn btn-primary" onclick="dismissVisualAlert()">
+          Dismiss Alert ✕
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Top App Navigation & Accessibility Controls Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand-group">
+        <a href="/" class="brand-link" aria-label="RingCare Home">
+          <div class="logo-circle">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="m9 12 2 2 4-4"/>
+            </svg>
+          </div>
+          <div>
+            <span class="brand-name">RingCare</span>
+            <span class="brand-badge">Amazon Vision API</span>
+          </div>
+        </a>
+        <div class="account-pill">
+          <span class="online-indicator"></span>
+          <span>Residence: <strong>Grandma Helen (Ring #4481)</strong></span>
+        </div>
+      </div>
+
+      <!-- Accessibility Toolbar -->
+      <nav class="accessibility-toolbar" aria-label="Accessibility settings">
+        <!-- Font Size Stepper -->
+        <div class="toolbar-item" title="Adjust text size for easier reading">
+          <span class="toolbar-label">Text:</span>
+          <div class="btn-group" role="group" aria-label="Text size controls">
+            <button class="btn btn-tool" id="btn-font-normal" onclick="setFontSize('normal')" aria-label="Normal text size">A</button>
+            <button class="btn btn-tool" id="btn-font-large" onclick="setFontSize('large')" aria-label="Large text size">A+</button>
+            <button class="btn btn-tool" id="btn-font-xlarge" onclick="setFontSize('xlarge')" aria-label="Extra large text size">A++</button>
+          </div>
+        </div>
+
+        <!-- High Contrast Mode Toggle -->
+        <button 
+          id="btn-high-contrast" 
+          class="btn btn-tool" 
+          onclick="toggleHighContrast()" 
+          title="Toggle high contrast black and yellow mode (WCAG AAA)"
+          aria-pressed="false"
+        >
+          <span id="contrast-icon">◐</span> High Contrast
+        </button>
+
+        <!-- TTS Voice Announcement Toggle -->
+        <button 
+          id="btn-tts-toggle" 
+          class="btn btn-tool active" 
+          onclick="toggleTTS()" 
+          title="Toggle speech synthesis voice alerts"
+          aria-pressed="true"
+        >
+          <span id="tts-icon">🔊</span> Voice Alerts: ON
+        </button>
+
+        <a href="/ring/link" class="btn btn-secondary btn-small" title="Manage Ring Partner Account Link">
+          🔗 Account Link
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="main-content" id="main-content">
+    
+    <!-- Demo Mode Active Notice & Simulator Bar -->
+    {% if demo_mode %}
+    <section class="demo-bar" aria-label="Hackathon Simulation Panel">
+      <div class="demo-bar-header">
+        <div class="demo-title-group">
+          <span class="demo-tag">HACKATHON DEMO MODE ACTIVE</span>
+          <span class="demo-subtitle">Simulate real-time Ring doorbell, motion events, and daily check-ins without physical hardware</span>
+        </div>
+      </div>
+      <div class="demo-actions-grid">
+        <button class="btn btn-demo btn-demo-ring" id="btn-sim-doorbell" onclick="simulateEvent('button_press', 'doorbell', 'dev_front_door_01')">
+          🔔 Ring Doorbell (Front Porch)
+        </button>
+        <button class="btn btn-demo btn-demo-motion" id="btn-sim-motion" onclick="simulateEvent('motion_detected', 'human', 'dev_hallway_cam_02')">
+          🚶 Human Motion (Hallway)
+        </button>
+        <button class="btn btn-demo btn-demo-pet" id="btn-sim-pet" onclick="simulateEvent('motion_detected', 'pet', 'dev_hallway_cam_02')">
+          🐱 Pet Motion (Quiet Hours Test)
+        </button>
+        <button class="btn btn-demo btn-demo-inactivity" id="btn-sim-inactivity" onclick="simulateInactivityCheck()">
+          ⚠️ Inactivity Check (Alert Trigger)
+        </button>
+        <button class="btn btn-demo btn-demo-offline" id="btn-sim-offline" onclick="toggleDeviceOfflineSim('dev_front_door_01')">
+          📶 Toggle Camera Offline
+        </button>
+      </div>
+
+      <!-- Demo Time Clock Override Control -->
+      <div class="demo-clock-container" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div class="demo-clock-info" style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.85rem; color: var(--text-muted);">🕒 <strong>Simulated Clock (DEMO_NOW):</strong></span>
+          <span id="demo-clock-display" class="badge-code">{{ current_time }}</span>
+        </div>
+        <div class="demo-clock-presets" style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-tool btn-small" onclick="setDemoTime('2026-10-22T04:30:00')" title="Simulate 04:30 AM (Before window opens)">04:30 AM (Waiting)</button>
+          <button type="button" class="btn btn-tool btn-small" onclick="setDemoTime('2026-10-22T08:15:00')" title="Simulate 08:15 AM (Inside morning window)">08:15 AM (Morning)</button>
+          <button type="button" class="btn btn-tool btn-small" onclick="setDemoTime('2026-10-22T10:30:00')" title="Simulate 10:30 AM (After window deadline)">10:30 AM (Needs Attention)</button>
+          <button type="button" class="btn btn-tool btn-small" onclick="setDemoTime('')" title="Reset to host system time">Reset (Live Time)</button>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Top Key Metrics Cards Grid -->
+    <div class="cards-grid">
+      
+      <!-- Card 1: Daily Care Check-in Status -->
+      <section class="card checkin-card" id="card-checkin" aria-labelledby="heading-checkin">
+        <div class="card-header">
+          <h2 id="heading-checkin" class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Daily Care Check-in
+          </h2>
+          <span class="badge-time">Window: {{ checkin_window_start }} - {{ checkin_target_time }} AM</span>
+        </div>
+
+        <div class="checkin-body">
+          <div class="checkin-status-indicator" id="checkin-status-box">
+            {% if checkin_status.status == 'checked_in' %}
+              <div class="status-icon status-success">✓</div>
+              <div class="status-info">
+                <span class="status-state text-success">Checked In: Safe & Active</span>
+                <p class="status-desc" id="checkin-desc">
+                  Morning movement verified at <strong id="checkin-time">{{ checkin_status.activity_time|format_time }}</strong>.
+                </p>
+              </div>
+            {% elif checkin_status.status == 'waiting' %}
+              <div class="status-icon status-pending">⏳</div>
+              <div class="status-info">
+                <span class="status-state text-warning">Waiting for Morning Activity</span>
+                <p class="status-desc" id="checkin-desc">
+                  Check-in window opens at {{ checkin_window_start }} AM.
+                </p>
+              </div>
+            {% elif checkin_status.status == 'needs_attention' %}
+              <div class="status-icon status-danger">⚠️</div>
+              <div class="status-info">
+                <span class="status-state text-danger">Needs Attention: Inactivity Alert</span>
+                <p class="status-desc" id="checkin-desc">
+                  No motion or door activity detected before {{ checkin_target_time }} AM! Caregiver alert dispatched.
+                </p>
+              </div>
+            {% else %}
+              <div class="status-icon status-pending">⏳</div>
+              <div class="status-info">
+                <span class="status-state text-warning">Pending Morning Movement</span>
+                <p class="status-desc" id="checkin-desc">
+                  Monitoring morning motion before {{ checkin_target_time }} AM deadline.
+                </p>
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="checkin-controls">
+            <button class="btn btn-secondary btn-small" id="btn-run-checkin" onclick="triggerCheckinEvaluation()">
+              Evaluate Check-in Now
+            </button>
+            <span class="checkin-subtext">Automatic evaluation runs daily via APScheduler</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Card 2: Ring Devices & Online Telemetry -->
+      <section class="card devices-card" id="card-devices" aria-labelledby="heading-devices">
+        <div class="card-header">
+          <h2 id="heading-devices" class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+            Linked Ring Devices
+          </h2>
+          <span class="badge-count" id="device-count">{{ devices|length }} Connected</span>
+        </div>
+
+        <ul class="device-list" id="device-list" role="list">
+          {% for d in devices %}
+          <li class="device-item" id="device-row-{{ d.id }}">
+            <div class="device-icon">
+              {% if d.kind == 'doorbell' %}🔔{% elif d.kind == 'stickup_cam' %}📹{% else %}📡{% endif %}
+            </div>
+            <div class="device-details">
+              <div class="device-name-row">
+                <strong class="device-name">{{ d.name }}</strong>
+                <span class="device-online-badge {{ 'online' if d.online else 'offline' }}" id="status-badge-{{ d.id }}">
+                  {{ 'Online' if d.online else 'Offline' }}
+                </span>
+              </div>
+              <div class="device-meta">
+                <span>📍 {{ d.location }}</span>
+                <span>🔋 {{ d.battery_level }}%</span>
+                <span class="quiet-status {{ 'active' if d.quiet_hours_enabled else '' }}">
+                  🌙 Quiet: {{ 'ON (' + d.quiet_hours_start + '-' + d.quiet_hours_end + ')' if d.quiet_hours_enabled else 'OFF' }}
+                </span>
+              </div>
+            </div>
+            <div class="device-actions">
+              <button 
+                class="btn btn-tool btn-small" 
+                onclick="openChimeModal('{{ d.id }}', '{{ d.name }}')"
+                title="Play a voice chime message on this device"
+                aria-label="Play message on chime for {{ d.name }}"
+              >
+                🔊 Chime
+              </button>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <!-- Card 3: Quick Voice Message on Chime -->
+      <section class="card chime-card" id="card-chime" aria-labelledby="heading-chime">
+        <div class="card-header">
+          <h2 id="heading-chime" class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+            Play Message on Chime
+          </h2>
+          <span class="badge-pill">Ring Audio Playback API</span>
+        </div>
+
+        <div class="chime-body">
+          <p class="chime-desc">Broadcast reassuring audio reminders or door alerts through the Ring speaker:</p>
+          
+          <div class="quick-chime-buttons">
+            <button class="btn btn-quick-chime" onclick="sendChimePreset('dev_front_door_01', 'Grandma, time for your morning medication 💊')">
+              💊 "Time for morning medication"
+            </button>
+            <button class="btn btn-quick-chime" onclick="sendChimePreset('dev_front_door_01', 'Caregiver Sarah is arriving in 5 minutes 🚗')">
+              🚗 "Caregiver arriving in 5 mins"
+            </button>
+            <button class="btn btn-quick-chime" onclick="sendChimePreset('dev_front_door_01', 'Please check the front door 🚪')">
+              🚪 "Please check the front door"
+            </button>
+          </div>
+
+          <div class="custom-chime-group">
+            <label for="custom-chime-input" class="sr-only">Custom Chime Message</label>
+            <input 
+              type="text" 
+              id="custom-chime-input" 
+              class="form-control" 
+              placeholder="Type custom message to play on chime..."
+              aria-label="Custom message to play on chime"
+            >
+            <button class="btn btn-primary" onclick="sendCustomChime('dev_front_door_01')">
+              Play Chime &rarr;
+            </button>
+          </div>
+          <div id="chime-status-msg" class="chime-status-feedback"></div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Main Section: Live Visitor Log & Activity Feed -->
+    <div class="main-grid">
+      
+      <!-- Left Column: Visitor Log & Activity Timeline -->
+      <section class="card visitor-log-card" aria-labelledby="heading-visitor-log">
+        <div class="card-header flex-between">
+          <div>
+            <h2 id="heading-visitor-log" class="card-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+              Visitor Log & Activity Stream
+            </h2>
+            <p class="card-subtitle">Live events pushed via Server-Sent Events (SSE). Tag visitors as Known or Unknown.</p>
+          </div>
+
+          <!-- Event Filter Tabs -->
+          <div class="filter-tabs" role="tablist" aria-label="Event filters">
+            <button class="tab-btn active" onclick="filterEvents('all', this)" role="tab" aria-selected="true">All Events</button>
+            <button class="tab-btn" onclick="filterEvents('button_press', this)" role="tab" aria-selected="false">Doorbell Rings</button>
+            <button class="tab-btn" onclick="filterEvents('motion_detected', this)" role="tab" aria-selected="false">Motion</button>
+            <button class="tab-btn" onclick="filterEvents('unknown', this)" role="tab" aria-selected="false">Unknown Visitors</button>
+          </div>
+        </div>
+
+        <!-- Live Events Container -->
+        <div class="events-container" id="events-feed" role="feed" aria-busy="false">
+          {% for ev in events %}
+          <article 
+            class="event-card {{ 'alert-border' if ev.event_type == 'button_press' or ev.sub_type == 'human' else '' }}" 
+            id="event-card-{{ ev.id }}"
+            data-type="{{ ev.event_type }}"
+            data-sub="{{ ev.sub_type }}"
+            data-visitor="{{ ev.visitor_tag }}"
+          >
+            <!-- Snapshot Preview Thumbnail -->
+            <div class="event-thumbnail-box">
+              <img 
+                src="{{ ev.snapshot_url or '/static/snapshots/placeholder_doorbell.jpg' }}" 
+                alt="Camera snapshot for {{ ev.device_name }}" 
+                class="event-snapshot" 
+                onclick="openSnapshotModal(this.src, '{{ ev.device_name }}', '{{ ev.timestamp|format_time }}')"
+                tabindex="0"
+                role="button"
+                aria-label="Enlarge camera snapshot"
+                onerror="onSnapshotError(this)"
+              >
+              {% if ev.received_offline %}
+                <span class="snapshot-badge offline">⚠️ Offline</span>
+              {% else %}
+                <span class="snapshot-badge">📸 Snapshot</span>
+              {% endif %}
+            </div>
+
+            <!-- Event Details -->
+            <div class="event-content">
+              <div class="event-headline">
+                <span class="event-type-badge {{ ev.event_type }}">
+                  {% if ev.event_type == 'button_press' %}🔔 Doorbell Press{% elif ev.sub_type == 'human' %}🚶 Human Motion{% else %}📡 {{ ev.sub_type or ev.event_type }}{% endif %}
+                </span>
+                <time class="event-timestamp" datetime="{{ ev.timestamp }}">{{ ev.timestamp|format_time }}</time>
+              </div>
+
+              {% if ev.received_offline %}
+                <div class="offline-event-notice">
+                  <span class="badge-offline-warning">⚠️ Received while device offline</span>
+                </div>
+              {% endif %}
+
+              <h3 class="event-title">{{ ev.device_name }}</h3>
+
+              <!-- Visitor Tagging Form -->
+              <div class="visitor-tag-group">
+                <span class="visitor-label">Visitor Classification:</span>
+                <div class="tag-buttons" role="group" aria-label="Classify visitor">
+                  <button 
+                    class="btn-tag btn-tag-known {{ 'active' if ev.visitor_tag == 'known' else '' }}"
+                    onclick="tagVisitor({{ ev.id }}, 'known', this)"
+                    aria-label="Mark as Known Visitor"
+                  >
+                    ✓ Known
+                  </button>
+                  <button 
+                    class="btn-tag btn-tag-unknown {{ 'active' if ev.visitor_tag == 'unknown' else '' }}"
+                    onclick="tagVisitor({{ ev.id }}, 'unknown', this)"
+                    aria-label="Mark as Unknown Visitor"
+                  >
+                    ✕ Unknown
+                  </button>
+                </div>
+              </div>
+
+              <!-- Caregiver Notes Input -->
+              <div class="visitor-notes-row">
+                <input 
+                  type="text" 
+                  class="notes-input" 
+                  id="notes-{{ ev.id }}" 
+                  placeholder="Add caregiver note (e.g. Nurse visit, family member)..."
+                  value="{{ ev.visitor_notes or '' }}"
+                  onblur="saveEventNotes({{ ev.id }})"
+                  aria-label="Caregiver notes for event {{ ev.id }}"
+                >
+                <button class="btn btn-tool btn-save-note" onclick="saveEventNotes({{ ev.id }})">Save</button>
+              </div>
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <!-- Right Column: Today's Timeline & Privacy Controls -->
+      <aside class="sidebar-column">
+        
+        <!-- Activity Timeline Summary -->
+        <section class="card timeline-card" aria-labelledby="heading-timeline">
+          <h2 id="heading-timeline" class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            Today's Activity Rhythm
+          </h2>
+          <p class="timeline-desc">Visual timeline of motion to detect changes in daily routine:</p>
+          
+          <div class="activity-bars-container">
+            <div class="timeline-hour"><span class="hour-label">6 AM</span><div class="bar-track"><div class="bar-fill" style="height: 20%;"></div></div></div>
+            <div class="timeline-hour"><span class="hour-label">7 AM</span><div class="bar-track"><div class="bar-fill" style="height: 45%;"></div></div></div>
+            <div class="timeline-hour"><span class="hour-label">8 AM</span><div class="bar-track"><div class="bar-fill active" style="height: 90%;"></div></div></div>
+            <div class="timeline-hour"><span class="hour-label">9 AM</span><div class="bar-track"><div class="bar-fill" style="height: 60%;"></div></div></div>
+            <div class="timeline-hour"><span class="hour-label">10 AM</span><div class="bar-track"><div class="bar-fill" style="height: 30%;"></div></div></div>
+            <div class="timeline-hour"><span class="hour-label">11 AM</span><div class="bar-track"><div class="bar-fill" style="height: 15%;"></div></div></div>
+            <div class="timeline-hour"><span class="hour-label">12 PM</span><div class="bar-track"><div class="bar-fill" style="height: 50%;"></div></div></div>
+          </div>
+          <div class="timeline-legend">
+            <span>🟢 Normal Active Rhythm</span>
+            <span>📍 Current Time: {{ current_time }}</span>
+          </div>
+        </section>
+
+        <!-- Privacy & Data Governance Card -->
+        <section class="card privacy-card" aria-labelledby="heading-privacy">
+          <h2 id="heading-privacy" class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            Privacy & Data Security
+          </h2>
+          <p class="privacy-note">
+            RingCare stores only safety-critical timestamps and low-resolution preview snapshots. All communication is authenticated server-to-server with HMAC-SHA256.
+          </p>
+          <div class="privacy-actions">
+            <a href="/privacy" class="btn btn-secondary btn-small">Privacy Notice & Consent</a>
+            <button class="btn btn-danger btn-small" onclick="quickPurgeData()">
+              🗑️ Purge My Data
+            </button>
+          </div>
+        </section>
+
+        <!-- Ring Developer Partner Architecture Card -->
+        <section class="card tech-card" aria-labelledby="heading-tech">
+          <h2 id="heading-tech" class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+            Registered Ring Endpoints
+          </h2>
+          <ul class="tech-list">
+            <li><code>POST /oauth/token</code> Token Exchange</li>
+            <li><code>GET /ring/link</code> Account Link (HMAC Nonce)</li>
+            <li><code>POST /webhooks/ring</code> Signed Webhooks (X-Sig)</li>
+            <li><code>GET /</code> Caregiver Dashboard</li>
+          </ul>
+        </section>
+
+      </aside>
+
+    </div>
+
+  </main>
+
+  <!-- Snapshot Zoom Modal -->
+  <div id="snapshot-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-backdrop" onclick="closeSnapshotModal()"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="modal-title" class="modal-title">Live Camera Snapshot Inspection</h3>
+        <button class="modal-close" onclick="closeSnapshotModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <img id="modal-img" src="" alt="Enlarged snapshot" class="modal-snapshot-img" onerror="onSnapshotError(this)">
+        <div class="modal-meta" id="modal-meta-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chime Message Modal -->
+  <div id="chime-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="chime-modal-title">
+    <div class="modal-backdrop" onclick="closeChimeModal()"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="chime-modal-title" class="modal-title">Broadcast Message on Device Chime</h3>
+        <button class="modal-close" onclick="closeChimeModal()" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="modal-device-id">
+        <p>Select or type a reassuring voice message to play through the speaker at <strong id="modal-device-name">Front Porch</strong>:</p>
+        <div class="quick-chime-buttons" style="margin: 16px 0;">
+          <button class="btn btn-quick-chime" onclick="selectModalPreset('Grandma, your lunch has arrived at the front door.')">
+            🍲 "Lunch has arrived at the door"
+          </button>
+          <button class="btn btn-quick-chime" onclick="selectModalPreset('Caregiver Martha is outside to say hello.')">
+            👋 "Caregiver Martha is outside"
+          </button>
+        </div>
+        <input type="text" id="modal-chime-text" class="form-control" placeholder="Message text...">
+        <div style="margin-top: 16px; text-align: right;">
+          <button class="btn btn-secondary" onclick="closeChimeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="submitModalChime()">Play Message &rarr;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Core JavaScript modules -->
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/simulator.js"></script>
+</body>
+</html>
