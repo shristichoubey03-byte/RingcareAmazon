@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RingCare - Privacy & Consent</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/accessibility.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="theme-dark">
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <a href="/" class="brand-link">
+          <div class="logo-circle">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="m9 12 2 2 4-4"/>
+            </svg>
+          </div>
+          <span class="brand-name">RingCare</span>
+        </a>
+      </div>
+      <div>
+        <a href="/" class="btn btn-secondary btn-small">&larr; Back to Dashboard</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content" style="max-width: 800px; margin: 40px auto; padding: 0 20px;">
+    <div class="card">
+      <h1 style="font-size: 1.8rem; margin-bottom: 12px;">Privacy, Consent & Data Governance</h1>
+      <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 24px;">
+        RingCare is purpose-built for sensitive eldercare monitoring. Protecting your loved one's privacy, dignity, and autonomy is our highest priority.
+      </p>
+
+      <div class="privacy-section">
+        <h3>1. What Data RingCare Collects</h3>
+        <ul>
+          <li><strong>Safety-Critical Event Timestamps:</strong> Ring doorbell presses and motion detection timestamps needed to verify that your loved one is safe and up in the morning.</li>
+          <li><strong>Visitor Snapshots:</strong> Low-resolution preview snapshots associated with doorbell rings to help identify legitimate visitors vs. unknown strangers.</li>
+          <li><strong>Device Health Telemetry:</strong> Battery percentages and online/offline status to alert family caregivers if safety hardware goes offline.</li>
+        </ul>
+      </div>
+
+      <div class="privacy-section">
+        <h3>2. What RingCare Never Collects</h3>
+        <ul>
+          <li><strong>No Continuous Video or Audio Surveillance:</strong> We do not record or retain continuous audio/video feeds.</li>
+          <li><strong>No Third-Party Sharing:</strong> All data is stored strictly in your local encrypted database instance. Never sold, never shared with third parties.</li>
+          <li><strong>Strict Server-to-Server Calls:</strong> All communication with Amazon Vision and Ring servers occurs backend-to-backend with HMAC-SHA256 request authentication.</li>
+        </ul>
+      </div>
+
+      <div class="privacy-section">
+        <h3>3. Full Data Deletion (Right to be Forgotten)</h3>
+        <p style="margin-bottom: 16px;">
+          You can purge all stored visitor snapshots, timestamps, and check-in logs immediately. This action is instantaneous and irrecoverable.
+        </p>
+
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); padding: 20px; border-radius: 8px;">
+          <h4 style="color: var(--danger); margin-bottom: 8px;">Permanent Data Purge</h4>
+          <p style="font-size: 0.9rem; margin-bottom: 16px;">
+            Permanently delete all visitor logs, activity events, and check-in records from the local SQLite database.
+          </p>
+          <button id="btn-purge-data" class="btn btn-danger" onclick="confirmPurgeData()">
+            🗑️ Delete All My Stored Data
+          </button>
+          <span id="purge-status" style="margin-left: 12px; font-weight: 600;"></span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    async function confirmPurgeData() {
+      if (!confirm("Are you sure you want to permanently delete all activity and visitor history? This cannot be undone.")) {
+        return;
+      }
+      const btn = document.getElementById("btn-purge-data");
+      const statusSpan = document.getElementById("purge-status");
+      btn.disabled = true;
+      statusSpan.innerText = "Purging...";
+
+      try {
+        const res = await fetch("/api/privacy/delete-data", { method: "POST" });
+        const data = await res.json();
+        if (data.status === "success") {
+          statusSpan.style.color = "var(--success)";
+          statusSpan.innerText = `Deleted ${data.details.events_deleted} events and ${data.details.checkins_deleted} check-in records.`;
+        } else {
+          statusSpan.style.color = "var(--danger)";
+          statusSpan.innerText = "Error purging data.";
+        }
+      } catch (e) {
+        statusSpan.style.color = "var(--danger)";
+        statusSpan.innerText = "Network error.";
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+================================================================================
+RINGCARE: ELDERLY & ACCESSIBILITY CARE MONITORING SYSTEM
+Built on the Ring Partner API (Amazon Vision API)
+================================================================================
+
+1. PROJECT OVERVIEW
+-------------------
+RingCare is an assistive caregiving and accessibility platform that transforms 
+everyday Ring smart doorbells and security cameras into an ambient safety monitor 
+for elderly, disabled, and deaf or hard-of-hearing individuals living independently.
+
+Instead of requiring seniors to remember to wear stigmatizing medical alert 
+pendants or press buttons, RingCare passively monitors natural daily routines 
+(such as waking up, entering the hallway, or answering the door). It automatically 
+verifies morning safety, alerts family caregivers if routine movement is missing, 
+and provides sensory audiovisual accommodations directly in the home.
+
+
+2. THE PROBLEM IT SOLVES
+------------------------
+* Fall & Inactivity Risk: Millions of seniors live alone. If an elder experiences 
+  a fall or medical emergency in the morning, traditional panic buttons are useless 
+  if the senior cannot reach them. RingCare detects inactivity automatically.
+* Deaf & Hard-of-Hearing Accessibility: Seniors with hearing impairments 
+  frequently miss conventional doorbells and delivery visitors. RingCare provides 
+  instant flashing visual alerts and browser text-to-speech voice announcements.
+* Vulnerability to Strangers: RingCare captures camera snapshots and enables remote 
+  caregivers to classify callers as "Known" (family, nurses, doctors) or "Unknown" 
+  (unsolicited visitors, salespeople).
+* Reassurance & Communication: Caregivers can broadcast reassuring audio messages 
+  and medication reminders directly through the Ring doorbell speaker.
+
+
+3. KEY FEATURES
+---------------
+1. Daily Morning Care Check-In:
+   - Configurable morning window (06:00 AM to 10:00 AM).
+   - Automatically verifies check-in when morning motion or door activity is detected.
+   - If 10:00 AM passes with no movement detected, RingCare dispatches an urgent 
+     caregiver inactivity alert.
+   - Smart window logic prevents late-night events (e.g. 01:00 AM) from counting 
+     as premature morning check-ins.
+
+2. Accessibility Suite (Deaf & Hard-of-Hearing):
+   - Flashing Visual Alert Banner: Giant, high-visibility pulsating banner activates 
+     instantly when someone rings the doorbell or approaches.
+   - Text-to-Speech (TTS): Speaks notifications aloud in natural voice via the 
+     Web Speech API with a one-click audio replay button.
+   - Dual-Tone Chime: Synthesized high-contrast Web Audio chimes designed for 
+     maximum audibility across various hearing profiles.
+   - WCAG AAA Contrast: Includes high-contrast black & amber theme and dynamic 
+     text size stepper (A, A+, A++).
+
+3. Smart Visitor Log & Safety Tagging:
+   - Captures 320x180 JPEG preview snapshots with camera name and timestamp.
+   - Includes SVG fallback placeholders so broken image icons never appear.
+   - Lets caregivers tag visitors as "Known" or "Unknown" with persistent notes.
+
+4. Ring Audio Playback & Remote Chime:
+   - Caregivers can broadcast one-click audio prompts through the Ring speaker:
+     * "Grandma, time for your morning medication 💊"
+     * "Caregiver is arriving in 5 minutes 🚗"
+     * "Please check the front door 🚪"
+   - Supports custom typed messages for remote voice announcements.
+
+5. Device Health & Telemetry:
+   - Real-time battery levels, Wi-Fi status, and online/offline detection.
+   - Displays warning badges if an event occurred while a camera was offline.
+   - Quiet Hours scheduling to mute non-human motion (pets, vehicles) at night.
+
+6. Privacy by Design:
+   - Zero continuous video streams are stored on server disks.
+   - Stores only safety timestamps and low-resolution preview snapshots.
+   - Includes an instant "Purge My Data" feature to delete all stored history.
+
+7. Hackathon Demo Mode:
+   - Built-in simulation panel to test doorbell presses, human motion, pet movement, 
+     inactivity alerts, and camera offline states without physical hardware.
+   - Simulated Clock Override (DEMO_NOW) to jump to 04:30 AM (waiting), 08:15 AM 
+     (morning check-in), or 10:30 AM (inactivity alert).
+
+
+4. TECHNICAL ARCHITECTURE & STACK
+---------------------------------
+* Backend: Python 3.11+, Flask REST API
+* Database: SQLite with automated schema migrations
+* Background Jobs: APScheduler (for daily 10:00 AM check-in evaluation)
+* Real-Time Pipeline: Server-Sent Events (SSE) stream (/api/events/stream)
+* Image Processing: Pillow (PIL) for snapshot generation with camera overlay
+* Security & API Compliance:
+  - HMAC-SHA256 signature verification (X-Signature) with constant-time compare
+  - Request deduplication on meta.request_id (instant 200 OK idempotency)
+  - Sub-5-second async webhook processing with background queue worker
+  - Proactive 24-hour Ring OAuth token refresh and rate limit exponential backoff
+* Frontend: Vanilla HTML5, Vanilla CSS (glassmorphism & high-contrast), Vanilla JS
+* Test Suite: 21 passing automated pytest test cases
+
+
+5. QUICK START INSTRUCTIONS
+---------------------------
+1. Install dependencies:
+   pip install -r requirements.txt
+
+2. Run automated test suite:
+   python -m pytest tests -v
+
+3. Start local development server:
+   python app.py
+
+4. Access dashboard:
+   Open http://127.0.0.1:5000 in your web browser.
+================================================================================
