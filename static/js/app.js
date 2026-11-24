@@ -69,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initAccessibilityPreferences();
   initSSE();
   initKeyboardListeners();
+  refreshEsp32Status();
 });
 
 /* ==============================================================================
@@ -246,24 +247,41 @@ function handleLiveEvent(data) {
   // 2. Check-in Updates
   if (data.type === 'checkin_alert') {
     updateCheckinCardUI('needs_attention', data.message);
+    const ackBtn = document.getElementById('btn-ack-checkin');
+    if (ackBtn) ackBtn.style.display = 'inline-flex';
     triggerVisualAlert("CARE CHECK-IN ALERT: NO ACTIVITY DETECTED", "Grandma's Residence", "alert", data.message, null, false);
     playSynthesizedChime('alert');
     speakText(data.message);
+    refreshEsp32Status();
   } else if (data.type === 'checkin_update') {
     updateCheckinCardUI(data.status, data.message);
+    if (data.status === 'checked_in') {
+      const ackBtn = document.getElementById('btn-ack-checkin');
+      if (ackBtn) ackBtn.style.display = 'none';
+    }
+  } else if (data.type === 'checkin_acknowledged') {
+    const ackBtn = document.getElementById('btn-ack-checkin');
+    if (ackBtn) ackBtn.style.display = 'none';
+    refreshEsp32Status();
   }
 
-  // 3. Device Online/Offline Telemetry
+  // 3. Hardware Status (ESP32 USB Serial)
+  if (data.type === 'hardware_status') {
+    updateEsp32UI(data);
+  }
+
+  // 4. Device Online/Offline Telemetry
   if (data.type === 'device_status') {
     updateDeviceBadge(data.device_id, data.online);
     announceScreenReader(data.message);
   }
 
-  // 4. Data Purge
+  // 5. Data Purge
   if (data.type === 'data_purged') {
     const feed = document.getElementById('events-feed');
     if (feed) feed.innerHTML = '<p style="padding: 20px; color: var(--text-muted); text-align: center;">No activity recorded yet.</p>';
     updateCheckinCardUI('waiting', 'Activity logs cleared.');
+    refreshEsp32Status();
   }
 }
 
@@ -624,3 +642,204 @@ async function quickPurgeData() {
     alert("Error purging data.");
   }
 }
+
+/* ==============================================================================
+   ESP32 USB Hardware Control API Functions
+   ============================================================================== */
+
+function showEsp32Feedback(msg, type = 'info') {
+  const el = document.getElementById('esp32-feedback-msg');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `esp32-status-feedback ${type}`;
+  setTimeout(() => {
+    if (el.textContent === msg) {
+      el.textContent = '';
+      el.className = 'esp32-status-feedback';
+    }
+  }, 4500);
+}
+
+function updateEsp32UI(data) {
+  if (!data) return;
+
+  // 1. Connection Status Badge
+  const badge = document.getElementById('esp32-status-badge');
+  if (badge && data.connection_status) {
+    badge.className = 'badge-status';
+    if (data.connection_status === 'connected') {
+      badge.classList.add('badge-connected');
+      badge.textContent = '● Connected';
+      badge.title = `Connected on ${data.port || 'USB'}`;
+    } else if (data.connection_status === 'error') {
+      badge.classList.add('badge-error');
+      badge.textContent = '⚠️ USB Error';
+      if (data.last_error) badge.title = data.last_error;
+    } else {
+      badge.classList.add('badge-disconnected');
+      badge.textContent = '○ Disconnected';
+      badge.title = 'No active serial connection to ESP32';
+    }
+  }
+
+  // 2. COM Port Display
+  const portDisp = document.getElementById('esp32-port-display');
+  if (portDisp && data.port) {
+    portDisp.textContent = data.port;
+  }
+
+  // 3. Buzzer Status Banner & Pulsing Animation
+  const banner = document.getElementById('esp32-buzzer-banner');
+  const stateVal = document.getElementById('esp32-buzzer-state');
+  if (stateVal && data.buzzer_status) {
+    stateVal.textContent = data.buzzer_status;
+  }
+  if (banner) {
+    if (data.buzzer_status === 'ON' || data.buzzer_status === 'TESTING') {
+      banner.classList.add('buzzer-active');
+    } else {
+      banner.classList.remove('buzzer-active');
+    }
+  }
+
+  // 4. Telemetry Details
+  const reasonEl = document.getElementById('esp32-reason-text');
+  if (reasonEl && data.last_activation_reason) {
+    reasonEl.textContent = data.last_activation_reason;
+  }
+  const timeEl = document.getElementById('esp32-time-text');
+  if (timeEl && data.last_activation_time) {
+    timeEl.textContent = data.last_activation_time;
+  }
+  const sourceBadge = document.getElementById('esp32-source-badge');
+  if (sourceBadge && data.last_activation_source) {
+    sourceBadge.textContent = data.last_activation_source.toUpperCase();
+    sourceBadge.className = `badge-source ${data.last_activation_source === 'automatic' ? 'source-auto' : 'source-manual'}`;
+  }
+}
+
+async function refreshEsp32Status() {
+  try {
+    const res = await fetch('/api/esp32/status');
+    if (!res.ok) return;
+    const data = await res.json();
+    updateEsp32UI(data);
+
+    // Update port select dropdown if available
+    const select = document.getElementById('esp32-port-select');
+    if (select && data.available_ports && data.available_ports.length > 0) {
+      const currentVal = select.value || data.port;
+      select.innerHTML = '';
+      data.available_ports.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        if (p === currentVal) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+  } catch (err) {
+    console.debug("Could not fetch ESP32 status:", err);
+  }
+}
+
+async function ringEsp32Buzzer() {
+  showEsp32Feedback('Sending ALERT command to ESP32...', 'info');
+  try {
+    const res = await fetch('/api/esp32/ring', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Manual caregiver buzzer test from dashboard' })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showEsp32Feedback('Physical buzzer activated! (ALERT sent)', 'success');
+      refreshEsp32Status();
+    } else {
+      showEsp32Feedback(`Activation error: ${data.message || 'Check connection'}`, 'error');
+    }
+  } catch (err) {
+    showEsp32Feedback('Failed to reach backend for buzzer control.', 'error');
+  }
+}
+
+async function stopEsp32Buzzer() {
+  showEsp32Feedback('Sending SAFE command to ESP32...', 'info');
+  try {
+    const res = await fetch('/api/esp32/stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Manual stop by caregiver' })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showEsp32Feedback('Physical buzzer stopped! (SAFE sent)', 'success');
+      refreshEsp32Status();
+    } else {
+      showEsp32Feedback(`Stop error: ${data.message}`, 'error');
+    }
+  } catch (err) {
+    showEsp32Feedback('Failed to reach backend to stop buzzer.', 'error');
+  }
+}
+
+async function testEsp32Buzzer() {
+  showEsp32Feedback('Triggering 3-beep test sequence (TEST sent)...', 'info');
+  try {
+    const res = await fetch('/api/esp32/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showEsp32Feedback('Buzzer test sequence playing on ESP32...', 'success');
+      refreshEsp32Status();
+    } else {
+      showEsp32Feedback(`Test error: ${data.message}`, 'error');
+    }
+  } catch (err) {
+    showEsp32Feedback('Failed to trigger buzzer test.', 'error');
+  }
+}
+
+async function configureEsp32Port() {
+  const select = document.getElementById('esp32-port-select');
+  const port = select ? select.value : '';
+  showEsp32Feedback(`Connecting to ${port || 'auto-detected port'}...`, 'info');
+  try {
+    const res = await fetch('/api/esp32/configure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port: port })
+    });
+    const data = await res.json();
+    if (data.connected) {
+      showEsp32Feedback(`Connected successfully to ${port}!`, 'success');
+    } else {
+      showEsp32Feedback(`Port connection notice: ${data.details.last_error || 'Board not responding'}`, 'error');
+    }
+    refreshEsp32Status();
+  } catch (err) {
+    showEsp32Feedback('Failed to configure COM port.', 'error');
+  }
+}
+
+async function acknowledgeInactivityAlert() {
+  try {
+    const res = await fetch('/api/checkin/acknowledge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: 'Caregiver acknowledged through dashboard.' })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      const ackBtn = document.getElementById('btn-ack-checkin');
+      if (ackBtn) ackBtn.style.display = 'none';
+      showEsp32Feedback('Alert acknowledged. Physical buzzer silenced.', 'success');
+      refreshEsp32Status();
+    }
+  } catch (err) {
+    console.error('Error acknowledging alert:', err);
+  }
+}
+

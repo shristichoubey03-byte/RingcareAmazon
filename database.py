@@ -121,6 +121,19 @@ def init_db():
             )
         """)
 
+        # Hardware Events table for ESP32 and external peripherals
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS hardware_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                alert_id TEXT,
+                activation_source TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                device_status TEXT NOT NULL,
+                message TEXT
+            )
+        """)
+
         conn.commit()
 
     if is_new or DEMO_MODE:
@@ -630,12 +643,58 @@ def set_checkin_status(status: str, notes: str, alert_sent: bool = False):
 # --- Privacy Data Purge ---
 
 def delete_all_user_data() -> Dict[str, int]:
-    """Deletes all personal events, snapshots, and checkin logs (GDPR & privacy compliance)."""
+    """Deletes all personal events, snapshots, checkin logs, and hardware logs (GDPR & privacy compliance)."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM events")
         events_deleted = cursor.rowcount
         cursor.execute("DELETE FROM checkins")
         checkins_deleted = cursor.rowcount
+        cursor.execute("DELETE FROM hardware_events")
+        hardware_deleted = cursor.rowcount
         conn.commit()
-        return {"events_deleted": events_deleted, "checkins_deleted": checkins_deleted}
+        return {
+            "events_deleted": events_deleted,
+            "checkins_deleted": checkins_deleted,
+            "hardware_deleted": hardware_deleted
+        }
+
+
+# --- Hardware Events (ESP32 USB Hardware Control) ---
+
+def log_hardware_event(
+    event_type: str,
+    activation_source: str,
+    device_status: str,
+    message: str,
+    alert_id: Optional[str] = None
+) -> int:
+    """Logs an ESP32 hardware activation, stop, or test event."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO hardware_events (event_type, alert_id, activation_source, device_status, message, timestamp)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (event_type, alert_id, activation_source, device_status, message))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def get_hardware_events(limit: int = 25) -> List[Dict[str, Any]]:
+    """Retrieves recent hardware events ordered by id descending."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM hardware_events ORDER BY id DESC LIMIT ?
+        """, (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_latest_hardware_event() -> Optional[Dict[str, Any]]:
+    """Retrieves the most recent hardware event."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM hardware_events ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+        return dict(row) if row else None
+

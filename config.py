@@ -41,6 +41,13 @@ HOST = os.getenv("HOST", "0.0.0.0")
 SECRET_KEY = os.getenv("SECRET_KEY", "ringcare-secret-key-caregiver-portal-2026")
 DATABASE_PATH = os.getenv("DATABASE_PATH", str(BASE_DIR / "ringcare.db"))
 
+# ESP32 USB Hardware Controller Settings
+ESP32_PORT = os.getenv("ESP32_PORT", "")  # e.g., 'COM5', empty string enables auto-detection
+ESP32_BAUDRATE = int(os.getenv("ESP32_BAUDRATE", "115200"))
+ESP32_TIMEOUT = float(os.getenv("ESP32_TIMEOUT", "2.0"))
+ESP32_MAX_BUZZER_DURATION = int(os.getenv("ESP32_MAX_BUZZER_DURATION", "60"))  # Seconds before auto-timeout
+ESP32_AUTO_CONNECT = os.getenv("ESP32_AUTO_CONNECT", "true").lower() in ("true", "1", "yes")
+
 # Caregiver check-in time configuration (HH:MM in 24h format)
 CHECKIN_WINDOW_START = os.getenv("CHECKIN_WINDOW_START", "06:00")
 CHECKIN_TARGET = os.getenv("CHECKIN_TARGET", os.getenv("CHECKIN_TARGET_TIME", "10:00"))

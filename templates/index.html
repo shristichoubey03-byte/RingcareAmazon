@@ -217,6 +217,9 @@
             <button class="btn btn-secondary btn-small" id="btn-run-checkin" onclick="triggerCheckinEvaluation()">
               Evaluate Check-in Now
             </button>
+            <button class="btn btn-danger btn-small" id="btn-ack-checkin" onclick="acknowledgeInactivityAlert()" style="{{ 'display: inline-flex;' if checkin_status.status == 'needs_attention' else 'display: none;' }}">
+              ✓ Acknowledge Alert & Silence Buzzer
+            </button>
             <span class="checkin-subtext">Automatic evaluation runs daily via APScheduler</span>
           </div>
         </div>
@@ -313,6 +316,104 @@
             </button>
           </div>
           <div id="chime-status-msg" class="chime-status-feedback"></div>
+        </div>
+      </section>
+
+      <!-- Card 4: ESP32 Hardware Control (Physical USB Buzzer) -->
+      <section class="card esp32-card" id="card-esp32" aria-labelledby="heading-esp32">
+        <div class="card-header flex-between">
+          <h2 id="heading-esp32" class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="4" width="16" height="16" rx="2"/>
+              <rect x="9" y="9" width="6" height="6"/>
+              <line x1="9" y1="1" x2="9" y2="4"/>
+              <line x1="15" y1="1" x2="15" y2="4"/>
+              <line x1="9" y1="20" x2="9" y2="23"/>
+              <line x1="15" y1="20" x2="15" y2="23"/>
+              <line x1="20" y1="9" x2="23" y2="9"/>
+              <line x1="20" y1="14" x2="23" y2="14"/>
+              <line x1="1" y1="9" x2="4" y2="9"/>
+              <line x1="1" y1="14" x2="4" y2="14"/>
+            </svg>
+            ESP32 Hardware Control
+          </h2>
+          <span class="badge-status {{ 'badge-connected' if esp32_status.connection_status == 'connected' else ('badge-error' if esp32_status.connection_status == 'error' else 'badge-disconnected') }}" id="esp32-status-badge">
+            {% if esp32_status.connection_status == 'connected' %}
+              ● Connected
+            {% elif esp32_status.connection_status == 'error' %}
+              ⚠️ USB Error
+            {% else %}
+              ○ Disconnected
+            {% endif %}
+          </span>
+        </div>
+
+        <div class="esp32-body">
+          <!-- Port Configuration & Connection Bar -->
+          <div class="esp32-port-row">
+            <div class="esp32-port-info">
+              <span class="port-label">USB Port:</span>
+              <strong id="esp32-port-display" class="port-badge">{{ esp32_status.port }}</strong>
+            </div>
+            <div class="esp32-port-selector-group">
+              <label for="esp32-port-select" class="sr-only">Select COM Port</label>
+              <select id="esp32-port-select" class="form-control form-control-sm" aria-label="Select ESP32 COM Port">
+                {% if esp32_status.available_ports %}
+                  {% for p in esp32_status.available_ports %}
+                    <option value="{{ p }}" {{ 'selected' if p == esp32_status.port else '' }}>{{ p }}</option>
+                  {% endfor %}
+                {% else %}
+                  <option value="">No Ports Detected</option>
+                {% endif %}
+              </select>
+              <button class="btn btn-tool btn-small" id="btn-esp32-connect" onclick="configureEsp32Port()" title="Connect or switch selected port">
+                Connect
+              </button>
+            </div>
+          </div>
+
+          <!-- Buzzer Real-Time State Display -->
+          <div class="buzzer-status-banner {{ 'buzzer-active' if esp32_status.buzzer_status == 'ON' else '' }}" id="esp32-buzzer-banner">
+            <div class="buzzer-indicator-dot" id="buzzer-dot"></div>
+            <div class="buzzer-status-text">
+              <span class="buzzer-state-label">Physical Buzzer:</span>
+              <strong id="esp32-buzzer-state" class="buzzer-state-value">{{ esp32_status.buzzer_status }}</strong>
+            </div>
+            <span class="buzzer-pin-tag">GPIO 23 &bull; 115200</span>
+          </div>
+
+          <!-- Buzzer Control Action Buttons -->
+          <div class="esp32-actions-grid">
+            <button class="btn btn-esp32 btn-ring" id="btn-esp32-ring" onclick="ringEsp32Buzzer()" title="Manually sound the physical buzzer">
+              🔔 Ring Buzzer
+            </button>
+            <button class="btn btn-esp32 btn-stop" id="btn-esp32-stop" onclick="stopEsp32Buzzer()" title="Immediately stop the physical buzzer">
+              ⏹️ Stop Buzzer
+            </button>
+            <button class="btn btn-esp32 btn-test" id="btn-esp32-test" onclick="testEsp32Buzzer()" title="Play a short 3-beep test pattern">
+              ⚡ Test Buzzer
+            </button>
+          </div>
+
+          <!-- Latest Alert Telemetry Box -->
+          <div class="esp32-alert-telemetry" id="esp32-telemetry-box">
+            <div class="telemetry-header">
+              <span class="telemetry-title">Latest Activation Telemetry</span>
+              <span class="badge-source {{ 'source-auto' if esp32_status.last_activation_source == 'automatic' else 'source-manual' }}" id="esp32-source-badge">
+                {{ esp32_status.last_activation_source|upper }}
+              </span>
+            </div>
+            <p class="telemetry-reason" id="esp32-reason-text">
+              {{ esp32_status.last_activation_reason }}
+            </p>
+            <div class="telemetry-meta">
+              <span class="meta-label">Time:</span>
+              <span class="meta-value" id="esp32-time-text">{{ esp32_status.last_activation_time }}</span>
+            </div>
+          </div>
+
+          <!-- Status Feedback Message -->
+          <div id="esp32-feedback-msg" class="esp32-status-feedback"></div>
         </div>
       </section>
 
