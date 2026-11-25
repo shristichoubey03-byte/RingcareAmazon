@@ -48,6 +48,9 @@ from config import (
     CHECKIN_TARGET,
     CHECKIN_TARGET_TIME,
     BASE_DIR,
+    ARDUINO_PORT,
+    ARDUINO_BAUDRATE,
+    ARDUINO_AUTO_CONNECT,
     ESP32_AUTO_CONNECT,
     get_now,
     set_simulated_now,
@@ -58,7 +61,7 @@ import snapshot_service
 from ring_client import RingClient, RingAPIError
 import webhook_handler
 import checkin_service
-from esp32_controller import esp32_controller
+from arduino_controller import arduino_controller, esp32_controller
 
 # Logging setup
 logging.basicConfig(
@@ -81,9 +84,9 @@ with app.app_context():
     snapshot_service.init_snapshots()
     database.init_db()
     checkin_service.start_scheduler()
-    if ESP32_AUTO_CONNECT:
-        # Connect to ESP32 in background thread so startup remains instantaneous
-        threading.Thread(target=esp32_controller.connect_esp32, daemon=True).start()
+    if ARDUINO_AUTO_CONNECT or ESP32_AUTO_CONNECT:
+        # Connect to Arduino Uno (ATmega328P) in background thread so startup remains instantaneous
+        threading.Thread(target=arduino_controller.connect_arduino, daemon=True).start()
 
 
 # Helper for masking emails (e.g. j***n@domain.com)
@@ -368,14 +371,15 @@ def dashboard():
     checkin_status = database.get_today_checkin_status()
     recent_events = database.get_events(limit=25)
     now = get_now()
-    esp32_status = esp32_controller.get_connection_status()
+    arduino_status = arduino_controller.get_connection_status()
 
     return render_template(
         "index.html",
         devices=devices,
         checkin_status=checkin_status,
         events=recent_events,
-        esp32_status=esp32_status,
+        arduino_status=arduino_status,
+        esp32_status=arduino_status,
         checkin_window_start=CHECKIN_WINDOW_START,
         checkin_target_time=CHECKIN_TARGET,
         demo_mode=DEMO_MODE,
@@ -513,80 +517,87 @@ def api_checkin_acknowledge():
 
 
 # =============================================================================
-# ESP32 USB Hardware Control Endpoints
+# Arduino Uno / ESP32 USB Hardware Control Endpoints
 # =============================================================================
 
+@app.route("/api/arduino/status", methods=["GET"])
 @app.route("/api/esp32/status", methods=["GET"])
-def api_esp32_status():
+def api_hardware_status():
     """
-    Returns real-time status of the ESP32 hardware controller:
+    Returns real-time status of the Arduino Uno (ATmega328P) hardware controller:
     - Connection status (connected / disconnected / error)
     - Active and available COM ports
-    - Buzzer status (ON / OFF / TESTING)
+    - Microcontroller specifications (ATmega328P, 16MHz, 5V logic)
+    - Buzzer status (ON / OFF / TESTING) and Digital Pin D8
+    - Real-time sensor telemetry
     - Last activation reason, timestamp, and source (automatic vs manual)
     """
-    status = esp32_controller.get_connection_status()
+    status = arduino_controller.get_connection_status()
     return jsonify(status), 200
 
 
+@app.route("/api/arduino/ring", methods=["POST"])
 @app.route("/api/esp32/ring", methods=["POST"])
-def api_esp32_ring():
+def api_hardware_ring():
     """
-    Manually activates the physical buzzer via ESP32 USB serial (ALERT command).
+    Manually activates the physical buzzer on Arduino Uno digital pin D8 via USB serial (ALERT command).
     """
     data = request.get_json(silent=True) or {}
     reason = data.get("reason", "Manual activation by caregiver")
-    res = esp32_controller.send_alert(reason=reason, source="manual")
+    res = arduino_controller.send_alert(reason=reason, source="manual")
     return jsonify({
         "status": "success",
-        "message": f"Buzzer activated: {reason}",
+        "message": f"Arduino Uno buzzer activated on Pin D8: {reason}",
         "details": res
     }), 200
 
 
+@app.route("/api/arduino/stop", methods=["POST"])
 @app.route("/api/esp32/stop", methods=["POST"])
-def api_esp32_stop():
+def api_hardware_stop():
     """
-    Manually stops the physical buzzer via ESP32 USB serial (SAFE command).
+    Manually stops the physical buzzer on Arduino Uno digital pin D8 via USB serial (SAFE command).
     """
     data = request.get_json(silent=True) or {}
     reason = data.get("reason", "Manual stop by caregiver")
-    res = esp32_controller.stop_alert(source="manual", reason=reason)
+    res = arduino_controller.stop_alert(source="manual", reason=reason)
     return jsonify({
         "status": "success",
-        "message": "Buzzer stopped successfully",
+        "message": "Arduino Uno buzzer stopped successfully",
         "details": res
     }), 200
 
 
+@app.route("/api/arduino/test", methods=["POST"])
 @app.route("/api/esp32/test", methods=["POST"])
-def api_esp32_test():
+def api_hardware_test():
     """
-    Runs a short 3-beep test sequence on the physical buzzer (TEST command).
+    Runs a short 3-beep test sequence on the Arduino Uno digital pin D8 buzzer (TEST command).
     """
-    res = esp32_controller.test_buzzer(source="manual")
+    res = arduino_controller.test_buzzer(source="manual")
     return jsonify({
         "status": "success",
-        "message": "Buzzer test sequence triggered (3 short beeps)",
+        "message": "Buzzer test sequence triggered on Arduino Uno Pin D8 (3 short beeps)",
         "details": res
     }), 200
 
 
+@app.route("/api/arduino/configure", methods=["POST"])
 @app.route("/api/esp32/configure", methods=["POST"])
-def api_esp32_configure():
+def api_hardware_configure():
     """
-    Configures or switches the active COM port for the ESP32 controller.
+    Configures or switches the active COM port for the Arduino Uno controller.
     """
     data = request.get_json(silent=True) or {}
     port = data.get("port")
     baudrate = data.get("baudrate")
 
     if not port or str(port).strip().lower() in ("auto", ""):
-        connected = esp32_controller.connect_esp32(port=None, baudrate=baudrate)
+        connected = arduino_controller.connect_arduino(port=None, baudrate=baudrate)
     else:
-        connected = esp32_controller.connect_esp32(port=str(port).strip(), baudrate=baudrate)
+        connected = arduino_controller.connect_arduino(port=str(port).strip(), baudrate=baudrate)
 
-    status = esp32_controller.get_connection_status()
+    status = arduino_controller.get_connection_status()
     return jsonify({
         "status": "success" if connected else "warning",
         "connected": connected,

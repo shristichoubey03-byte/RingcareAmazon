@@ -41,12 +41,19 @@ HOST = os.getenv("HOST", "0.0.0.0")
 SECRET_KEY = os.getenv("SECRET_KEY", "ringcare-secret-key-caregiver-portal-2026")
 DATABASE_PATH = os.getenv("DATABASE_PATH", str(BASE_DIR / "ringcare.db"))
 
-# ESP32 USB Hardware Controller Settings
-ESP32_PORT = os.getenv("ESP32_PORT", "")  # e.g., 'COM5', empty string enables auto-detection
-ESP32_BAUDRATE = int(os.getenv("ESP32_BAUDRATE", "115200"))
-ESP32_TIMEOUT = float(os.getenv("ESP32_TIMEOUT", "2.0"))
-ESP32_MAX_BUZZER_DURATION = int(os.getenv("ESP32_MAX_BUZZER_DURATION", "60"))  # Seconds before auto-timeout
-ESP32_AUTO_CONNECT = os.getenv("ESP32_AUTO_CONNECT", "true").lower() in ("true", "1", "yes")
+# Arduino Uno (ATmega328P) USB Hardware Controller Settings
+ARDUINO_PORT = os.getenv("ARDUINO_PORT", os.getenv("ESP32_PORT", ""))  # e.g., 'COM3', empty enables auto-detect
+ARDUINO_BAUDRATE = int(os.getenv("ARDUINO_BAUDRATE", os.getenv("ESP32_BAUDRATE", "115200")))
+ARDUINO_TIMEOUT = float(os.getenv("ARDUINO_TIMEOUT", os.getenv("ESP32_TIMEOUT", "2.0")))
+ARDUINO_MAX_BUZZER_DURATION = int(os.getenv("ARDUINO_MAX_BUZZER_DURATION", os.getenv("ESP32_MAX_BUZZER_DURATION", "60")))  # Seconds before auto-timeout
+ARDUINO_AUTO_CONNECT = os.getenv("ARDUINO_AUTO_CONNECT", os.getenv("ESP32_AUTO_CONNECT", "true")).lower() in ("true", "1", "yes")
+
+# Backward compatibility aliases
+ESP32_PORT = ARDUINO_PORT
+ESP32_BAUDRATE = ARDUINO_BAUDRATE
+ESP32_TIMEOUT = ARDUINO_TIMEOUT
+ESP32_MAX_BUZZER_DURATION = ARDUINO_MAX_BUZZER_DURATION
+ESP32_AUTO_CONNECT = ARDUINO_AUTO_CONNECT
 
 # Caregiver check-in time configuration (HH:MM in 24h format)
 CHECKIN_WINDOW_START = os.getenv("CHECKIN_WINDOW_START", "06:00")

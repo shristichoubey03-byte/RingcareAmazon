@@ -26,7 +26,7 @@ from config import (
 import database
 from webhook_handler import broadcast_event
 from ring_client import RingClient
-from esp32_controller import esp32_controller
+from arduino_controller import arduino_controller, esp32_controller
 
 logger = logging.getLogger("ringcare.checkin")
 
@@ -80,18 +80,18 @@ def evaluate_daily_checkin(is_manual: bool = False) -> Dict[str, Any]:
         msg = f"CARE CHECK-IN ALERT: No movement detected between {CHECKIN_WINDOW_START} and {CHECKIN_TARGET} AM."
         logger.warning(f"CAREGIVER ALERT: {msg}")
 
-        # Send command to ESP32: activate physical buzzer
+        # Send command to Arduino Uno: activate physical buzzer on Pin D8
         # Prevent continuous re-triggering for the same daily alert unless manually tested
         should_alert_hardware = is_manual or (_last_hardware_alert_date != today_date)
         hardware_res = None
         if should_alert_hardware:
             _last_hardware_alert_date = today_date
-            hardware_res = esp32_controller.send_alert(
+            hardware_res = arduino_controller.send_alert(
                 reason=f"Care Check-In Alert: No movement detected by {CHECKIN_TARGET} AM deadline",
                 alert_id=f"inactivity_{today_str}",
                 source="manual" if is_manual else "automatic"
             )
-            logger.info(f"ESP32 hardware alert dispatched: {hardware_res}")
+            logger.info(f"Arduino Uno (Pin D8) hardware alert dispatched: {hardware_res}")
 
         res = {
             "status": "needs_attention",
@@ -144,8 +144,8 @@ def acknowledge_checkin_alert(notes: str = "Acknowledged by caregiver") -> Dict[
     """
     now = get_now()
     formatted_time = format_timestamp(now)
-    # Stop buzzer on ESP32
-    esp32_res = esp32_controller.stop_alert(
+    # Stop buzzer on Arduino Uno
+    arduino_res = arduino_controller.stop_alert(
         source="manual",
         reason=f"Caregiver acknowledged alert at {formatted_time}"
     )
@@ -167,7 +167,7 @@ def acknowledge_checkin_alert(notes: str = "Acknowledged by caregiver") -> Dict[
         "status": "success",
         "acknowledged": True,
         "notes": ack_notes,
-        "hardware": esp32_res
+        "hardware": arduino_res
     }
 
 
