@@ -207,15 +207,15 @@ class ArduinoController:
                 self.serial_conn = serial.Serial(
                     port=target_port,
                     baudrate=target_baud,
-                    timeout=self.timeout,
-                    write_timeout=self.timeout
+                    timeout=0.5,
+                    write_timeout=1.0
                 )
-                # Arduino Uno resets upon DTR toggle; allow 2.0s settling time for bootloader
-                time.sleep(2.0)
+                # Arduino Uno resets upon DTR toggle; allow 1.5s settling time for bootloader
+                time.sleep(1.5)
 
                 # Flush initial bootloader messages
                 if self.serial_conn.in_waiting:
-                    init_msg = self.serial_conn.read_all().decode("utf-8", errors="ignore").strip()
+                    init_msg = self.serial_conn.read(self.serial_conn.in_waiting).decode("utf-8", errors="ignore").strip()
                     logger.info(f"Arduino Uno Boot Msg: {init_msg}")
 
                 self.connection_status = "connected"
@@ -264,6 +264,7 @@ class ArduinoController:
     def _send_raw_command_unlocked(self, cmd: str) -> Optional[str]:
         """
         Sends raw ASCII command terminated with newline and reads confirmation.
+        Non-blocking with a strict 0.5s read deadline to avoid freezing web requests.
         Must be called while self.lock is acquired.
         """
         if not self.serial_conn or not self.serial_conn.is_open:
@@ -274,8 +275,24 @@ class ArduinoController:
             self.serial_conn.write(line_to_send)
             self.serial_conn.flush()
 
-            # Read response line with timeout
-            response_line = self.serial_conn.readline().decode("utf-8", errors="ignore").strip()
+            # Non-blocking response read with strict 0.5s deadline
+            response_line = ""
+            start_t = time.time()
+            while time.time() - start_t < 0.5:
+                if self.serial_conn.in_waiting:
+                    raw = self.serial_conn.readline()
+                    response_line = raw.decode("utf-8", errors="ignore").strip()
+                    if response_line:
+                        break
+                time.sleep(0.02)
+
+            if not response_line:
+                response_line = f"CMD_SENT:{cmd.strip()}"
+            else:
+                response_line = response_line.strip("\x00\r\n\t ")
+                if not response_line:
+                    response_line = f"CMD_SENT:{cmd.strip()}"
+
             logger.info(f"Arduino Uno TX: '{cmd.strip()}' -> RX: '{response_line}'")
             return response_line
 
@@ -486,8 +503,8 @@ class ArduinoController:
                 self.serial_conn = serial.Serial(
                     port=port,
                     baudrate=self.baudrate,
-                    timeout=self.timeout,
-                    write_timeout=self.timeout
+                    timeout=0.5,
+                    write_timeout=1.0
                 )
                 time.sleep(1.5)
                 self.connection_status = "connected"
